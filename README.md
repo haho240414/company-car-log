@@ -1,0 +1,45 @@
+# 공유형 Android 차계부
+
+회사 사람들이 같은 앱으로 카니발, 스타렉스, 넥쏘 운행기록부를 등록하고 월별 Excel/PDF 출력 요청까지 할 수 있는 Android 앱입니다.
+
+## 구현 범위
+
+- Kotlin + Jetpack Compose Android 앱
+- CameraX 촬영 화면과 Android Photo Picker 사진 선택
+- 초대코드 + 성명 + PIN 로그인 화면
+- 부서/직책 선택 및 기타 입력
+- 차량별 운행 등록과 기록 조회
+- 도착 후 계기판 사진 1장 등록 흐름
+- 출발 누적거리 자동 입력: 같은 차량의 직전 도착 누적거리 사용
+- 주행거리 및 월 업무용 주행거리 누계 계산
+- 월별 Excel/PDF 출력 요청 UI
+- 서버 교체를 위한 Repository/OCR/Export 인터페이스 경계
+- 계산 로직 단위 테스트
+
+## 현재 데모 동작
+
+실제 공용 클라우드, AI OCR, Excel/PDF 생성은 서버 자격증명과 배포 환경이 필요하므로 앱 안에는 데모 구현이 연결되어 있습니다.
+
+- 초대코드: `HWACHEON-2026`
+- 관리자 데모 PIN: `0000`
+- 사진 OCR: 서버 연결 전까지 파일명에 4~7자리 숫자가 있을 때만 데모 인식하며, 일반 사진은 사용자가 도착 누적거리를 확인 입력합니다.
+- 출력: 실제 파일 다운로드 대신 서버 연결 후 생성될 파일명을 미리 보여줍니다.
+
+실서버 구현 시 `DemoCompanyCloudRepository`와 `DemoMileageOcrService`를 API 구현체로 교체하면 UI와 계산 로직은 그대로 사용할 수 있습니다. API 형태는 [docs/API_CONTRACT.md](docs/API_CONTRACT.md)에 정리되어 있습니다.
+
+## Android Studio에서 실행
+
+1. Android Studio에서 이 폴더를 엽니다.
+2. Gradle Sync를 실행합니다.
+3. Android SDK 35와 JDK 17을 사용합니다.
+4. 에뮬레이터 또는 Android 기기에서 `app` 구성을 실행합니다.
+
+## 테스트
+
+Android 빌드 환경이 있는 곳에서 Android Studio의 Gradle 패널로 `testDebugUnitTest`를 실행하거나, Gradle이 설치되어 있다면 다음을 실행합니다.
+
+```powershell
+gradle testDebugUnitTest
+```
+
+테스트는 차량별 거리 분리, 첫 기록의 초기 누적거리, 도착거리 검증, 월별 누계 리셋, 기본 고정값 저장을 확인합니다.
