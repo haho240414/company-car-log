@@ -30,6 +30,7 @@ enum class Position(val label: String) {
 }
 
 enum class ExportFormat(val label: String, val extension: String) {
+    DOCX("Word 문서", "docx"),
     CSV("Google Sheets CSV", "csv"),
     XLSX("Excel", "xlsx"),
     PDF("PDF", "pdf")

@@ -50,6 +50,13 @@ interface CompanyCarLogRepository {
         photoUri: String?
     ): Result<TripLog>
 
+    suspend fun deleteTrip(tripId: String): Result<Unit>
+
+    suspend fun updateVehicleRegistration(
+        vehicleId: String,
+        registrationNumber: String
+    ): Result<Vehicle>
+
     suspend fun requestExport(request: ExportRequest): Result<ExportResult>
 }
 
@@ -83,7 +90,7 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
     private val _state = MutableStateFlow(
         CompanyCarLogState(
             currentUser = loadUser(),
-            vehicles = seedVehicles,
+            vehicles = loadVehicles(),
             trips = loadTrips()
         )
     )
@@ -158,6 +165,41 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
         }
     }
 
+    override suspend fun deleteTrip(tripId: String): Result<Unit> {
+        delay(150)
+        val existing = state.value.trips
+        if (existing.none { it.id == tripId }) {
+            return Result.failure(IllegalArgumentException("삭제할 운행 기록을 찾을 수 없습니다."))
+        }
+        val updatedTrips = existing.filterNot { it.id == tripId }
+            .recalculateMonthlyTotals()
+            .sortedForDisplay()
+        persistTrips(updatedTrips)
+        _state.update { it.copy(trips = updatedTrips) }
+        return Result.success(Unit)
+    }
+
+    override suspend fun updateVehicleRegistration(
+        vehicleId: String,
+        registrationNumber: String
+    ): Result<Vehicle> {
+        delay(150)
+        val cleaned = registrationNumber.trim()
+        if (cleaned.isBlank()) {
+            return Result.failure(IllegalArgumentException("차량번호를 입력해 주세요."))
+        }
+        val currentVehicles = state.value.vehicles
+        val vehicle = currentVehicles.firstOrNull { it.id == vehicleId }
+            ?: return Result.failure(IllegalArgumentException("차량을 찾을 수 없습니다."))
+        val updatedVehicle = vehicle.copy(registrationNumber = cleaned)
+        val updatedVehicles = currentVehicles.map {
+            if (it.id == vehicleId) updatedVehicle else it
+        }
+        persistVehicles(updatedVehicles)
+        _state.update { it.copy(vehicles = updatedVehicles) }
+        return Result.success(updatedVehicle)
+    }
+
     override suspend fun requestExport(request: ExportRequest): Result<ExportResult> {
         delay(300)
         val vehicle = state.value.vehicles.firstOrNull { it.id == request.vehicleId }
@@ -187,6 +229,15 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
             .apply()
     }
 
+    private fun persistVehicles(vehicles: List<Vehicle>) {
+        val payload = JSONArray().apply {
+            vehicles.forEach { put(it.toJson()) }
+        }
+        prefs.edit()
+            .putString(KEY_VEHICLES, payload.toString())
+            .apply()
+    }
+
     private fun persistTrips(trips: List<TripLog>) {
         val payload = JSONArray().apply {
             trips.forEach { put(it.toJson()) }
@@ -194,6 +245,19 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
         prefs.edit()
             .putString(KEY_TRIPS, payload.toString())
             .apply()
+    }
+
+    private fun loadVehicles(): List<Vehicle> {
+        val raw = prefs.getString(KEY_VEHICLES, null) ?: return seedVehicles
+        return runCatching {
+            val array = JSONArray(raw)
+            val persisted = buildList {
+                for (index in 0 until array.length()) {
+                    add(array.getJSONObject(index).toVehicle())
+                }
+            }.associateBy { it.id }
+            seedVehicles.map { persisted[it.id] ?: it }
+        }.getOrDefault(seedVehicles)
     }
 
     private fun loadUser(): UserProfile? {
@@ -218,6 +282,35 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
             compareByDescending<TripLog> { it.usageDate }
                 .thenByDescending { it.createdAtMillis }
         )
+
+    private fun List<TripLog>.recalculateMonthlyTotals(): List<TripLog> {
+        return groupBy { it.vehicleId to YearMonth.from(it.usageDate) }
+            .values
+            .flatMap { group ->
+                var total = 0
+                group.sortedWith(compareBy<TripLog> { it.usageDate }.thenBy { it.createdAtMillis })
+                    .map { trip ->
+                        total += trip.drivingDistanceKm
+                        trip.copy(monthlyBusinessDistanceKm = total)
+                    }
+            }
+    }
+
+    private fun Vehicle.toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        put("registrationNumber", registrationNumber)
+        put("isActive", isActive)
+        put("initialOdometerKm", initialOdometerKm)
+    }
+
+    private fun JSONObject.toVehicle(): Vehicle = Vehicle(
+        id = getString("id"),
+        name = getString("name"),
+        registrationNumber = getString("registrationNumber"),
+        isActive = optBoolean("isActive", true),
+        initialOdometerKm = optInt("initialOdometerKm", 0)
+    )
 
     private fun UserProfile.toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -283,6 +376,7 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
 
     private companion object {
         const val KEY_USER = "user"
+        const val KEY_VEHICLES = "vehicles"
         const val KEY_TRIPS = "trips"
     }
 }

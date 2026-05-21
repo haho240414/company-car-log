@@ -24,11 +24,13 @@ import kr.co.hwacheon.carmileage.data.ImageMetadataReader
 import kr.co.hwacheon.carmileage.data.LocalCompanyCarLogRepository
 import kr.co.hwacheon.carmileage.data.MileageOcrService
 import kr.co.hwacheon.carmileage.data.MlKitMileageOcrService
+import kr.co.hwacheon.carmileage.data.WordDocxBuilder
 import kr.co.hwacheon.carmileage.domain.Department
 import kr.co.hwacheon.carmileage.domain.ExportFormat
 import kr.co.hwacheon.carmileage.domain.ExportRequest
 import kr.co.hwacheon.carmileage.domain.MileageCalculator
 import kr.co.hwacheon.carmileage.domain.Position
+import kr.co.hwacheon.carmileage.domain.TripLog
 import kr.co.hwacheon.carmileage.domain.Vehicle
 
 enum class AppTab(val label: String) {
@@ -62,7 +64,7 @@ data class TripEditorState(
 
 data class ExportFormState(
     val month: String = YearMonth.now().toString(),
-    val format: ExportFormat = ExportFormat.CSV,
+    val format: ExportFormat = ExportFormat.DOCX,
     val resultMessage: String? = null,
     val shareUri: String? = null,
     val shareMimeType: String? = null,
@@ -264,9 +266,19 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch {
             setBusy(true)
-            if (state.screen.export.format == ExportFormat.CSV) {
-                createAndShareCsv(vehicle = vehicle, month = month)
-                return@launch
+            when (state.screen.export.format) {
+                ExportFormat.DOCX -> {
+                    createAndShareWord(vehicle = vehicle, month = month)
+                    return@launch
+                }
+
+                ExportFormat.CSV -> {
+                    createAndShareCsv(vehicle = vehicle, month = month)
+                    return@launch
+                }
+
+                ExportFormat.XLSX,
+                ExportFormat.PDF -> Unit
             }
             repository.requestExport(
                 ExportRequest(
@@ -288,6 +300,33 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
                 onFailure = { error ->
                     setBusy(false)
                     setMessage(error.message ?: "출력 요청에 실패했습니다.")
+                }
+            )
+        }
+    }
+
+    fun deleteTrip(tripId: String) {
+        viewModelScope.launch {
+            repository.deleteTrip(tripId).fold(
+                onSuccess = {
+                    refreshStartOdometer(_screen.value.selectedVehicleId)
+                    setMessage("운행 기록을 삭제했습니다.")
+                },
+                onFailure = { error ->
+                    setMessage(error.message ?: "운행 기록을 삭제하지 못했습니다.")
+                }
+            )
+        }
+    }
+
+    fun updateVehicleRegistration(vehicleId: String, registrationNumber: String) {
+        viewModelScope.launch {
+            repository.updateVehicleRegistration(vehicleId, registrationNumber).fold(
+                onSuccess = { vehicle ->
+                    setMessage("${vehicle.name} 차량번호를 저장했습니다.")
+                },
+                onFailure = { error ->
+                    setMessage(error.message ?: "차량번호를 저장하지 못했습니다.")
                 }
             )
         }
@@ -338,7 +377,8 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
             .sortedWith(compareBy { it.usageDate })
         val fileName = "${month}_${vehicle.name}_운행기록부.csv".replace(" ", "_")
         val csv = buildCsv(vehicle, month, trips)
-        val downloadUri = saveCsvToDownloads(fileName, csv)
+        val mimeType = "text/csv"
+        val downloadUri = saveFileToDownloads(fileName, mimeType, csv.toByteArray(Charsets.UTF_8))
         val directory = File(getApplication<Application>().cacheDir, "exports").also { it.mkdirs() }
         val file = File(directory, fileName)
         file.writeText(csv, Charsets.UTF_8)
@@ -360,7 +400,44 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
                         append("\n공유 화면에서 Gmail, 카카오톡, Google Sheets 등을 선택할 수 있습니다.")
                     },
                     shareUri = uri.toString(),
-                    shareMimeType = "text/csv",
+                    shareMimeType = mimeType,
+                    shareTitle = fileName,
+                    previewRows = buildPreviewRows(vehicle, month, trips)
+                )
+            )
+        }
+    }
+
+    private fun createAndShareWord(vehicle: Vehicle, month: YearMonth) {
+        val trips = repository.state.value.trips
+            .filter { it.vehicleId == vehicle.id && YearMonth.from(it.usageDate) == month }
+            .sortedWith(compareBy { it.usageDate })
+        val fileName = "${month}_${vehicle.name}_운행기록부.docx".replace(" ", "_")
+        val mimeType = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        val bytes = WordDocxBuilder.build(vehicle, month, trips)
+        val downloadUri = saveFileToDownloads(fileName, mimeType, bytes)
+        val directory = File(getApplication<Application>().cacheDir, "exports").also { it.mkdirs() }
+        val file = File(directory, fileName)
+        file.writeBytes(bytes)
+        val uri = FileProvider.getUriForFile(
+            getApplication(),
+            "${getApplication<Application>().packageName}.fileprovider",
+            file
+        )
+
+        _screen.update {
+            it.copy(
+                busy = false,
+                export = it.export.copy(
+                    resultMessage = buildString {
+                        append("Word 문서를 만들었습니다.")
+                        if (downloadUri != null) {
+                            append("\nDownloads 폴더에도 저장했습니다.")
+                        }
+                        append("\n공유 화면에서 Word, Gmail, 카카오톡 등을 선택할 수 있습니다.")
+                    },
+                    shareUri = uri.toString(),
+                    shareMimeType = mimeType,
                     shareTitle = fileName,
                     previewRows = buildPreviewRows(vehicle, month, trips)
                 )
@@ -371,7 +448,7 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
     private fun buildCsv(
         vehicle: Vehicle,
         month: YearMonth,
-        trips: List<kr.co.hwacheon.carmileage.domain.TripLog>
+        trips: List<TripLog>
     ): String {
         val rows = mutableListOf<List<String>>()
         rows += listOf("${month.year}년 ${month.monthValue}월 업무용승용차 운행기록부")
@@ -420,20 +497,20 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    private fun saveCsvToDownloads(fileName: String, csv: String): Uri? {
+    private fun saveFileToDownloads(fileName: String, mimeType: String, bytes: ByteArray): Uri? {
         val resolver = getApplication<Application>().contentResolver
         return runCatching {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
-                    put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                    put(MediaStore.MediaColumns.MIME_TYPE, mimeType)
                     put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                     put(MediaStore.MediaColumns.IS_PENDING, 1)
                 }
                 val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
                     ?: return@runCatching null
                 resolver.openOutputStream(uri)?.use { output ->
-                    output.write(csv.toByteArray(Charsets.UTF_8))
+                    output.write(bytes)
                 }
                 values.clear()
                 values.put(MediaStore.MediaColumns.IS_PENDING, 0)
@@ -448,7 +525,7 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
     private fun buildPreviewRows(
         vehicle: Vehicle,
         month: YearMonth,
-        trips: List<kr.co.hwacheon.carmileage.domain.TripLog>
+        trips: List<TripLog>
     ): List<List<String>> {
         val header = listOf("일자", "경유지", "출발km", "도착km", "주행km", "월누계")
         val rows = trips.map { trip ->

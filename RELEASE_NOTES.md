@@ -1,5 +1,19 @@
 # Release Notes
 
+## v0.1.4 - Word export and vehicle management
+
+### Added
+
+- Working Word `.docx` export generated directly on the phone.
+- Word and CSV exports are saved to Downloads and opened through Android sharing.
+- Vehicle registration numbers can be edited and saved from the management tab.
+- Saved trip records can be deleted from the history tab.
+
+### Improved
+
+- Export screen now shows only file formats that currently create a real local file.
+- Vehicle registration numbers persist on the phone and are used in future exports.
+
 ## v0.1.3 - Photo location and reliable CSV export
 
 ### Added

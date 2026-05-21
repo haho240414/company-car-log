@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AdminPanelSettings
 import androidx.compose.material.icons.filled.CameraAlt
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.History
@@ -132,7 +133,9 @@ fun CarLogApp(viewModel: CarLogViewModel) {
             onOpenCamera = { cameraOpen = true },
             onSaveTrip = viewModel::saveTrip,
             onExportChange = viewModel::updateExport,
-            onRequestExport = viewModel::requestExport
+            onRequestExport = viewModel::requestExport,
+            onDeleteTrip = viewModel::deleteTrip,
+            onVehicleRegistrationChange = viewModel::updateVehicleRegistration
         )
     }
 }
@@ -263,7 +266,9 @@ private fun MainScreen(
     onOpenCamera: () -> Unit,
     onSaveTrip: () -> Unit,
     onExportChange: ((kr.co.hwacheon.carmileage.ExportFormState) -> kr.co.hwacheon.carmileage.ExportFormState) -> Unit,
-    onRequestExport: () -> Unit
+    onRequestExport: () -> Unit,
+    onDeleteTrip: (String) -> Unit,
+    onVehicleRegistrationChange: (String, String) -> Unit
 ) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -333,7 +338,7 @@ private fun MainScreen(
                         Text("운행 내역", style = MaterialTheme.typography.titleMedium)
                     }
                     items(uiState.selectedVehicleTrips) { trip ->
-                        TripLogRow(trip = trip)
+                        TripLogRow(trip = trip, onDelete = { onDeleteTrip(trip.id) })
                     }
                     if (uiState.selectedVehicleTrips.isEmpty()) {
                         item {
@@ -351,7 +356,10 @@ private fun MainScreen(
                 }
 
                 AppTab.ADMIN -> item {
-                    AdminPanel(uiState = uiState)
+                    AdminPanel(
+                        uiState = uiState,
+                        onVehicleRegistrationChange = onVehicleRegistrationChange
+                    )
                 }
             }
         }
@@ -528,7 +536,7 @@ private fun ExportPanel(
                 singleLine = true
             )
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                ExportFormat.entries.forEach { format ->
+                listOf(ExportFormat.DOCX, ExportFormat.CSV).forEach { format ->
                     FilterChip(
                         selected = export.format == format,
                         onClick = { onChange { it.copy(format = format) } },
@@ -545,10 +553,11 @@ private fun ExportPanel(
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
                 Text(
-                    if (export.format == ExportFormat.CSV) {
-                        "다운로드하고 공유"
-                    } else {
-                        "사진 양식으로 출력 요청"
+                    when (export.format) {
+                        ExportFormat.DOCX -> "Word로 저장하고 공유"
+                        ExportFormat.CSV -> "CSV 다운로드하고 공유"
+                        ExportFormat.XLSX,
+                        ExportFormat.PDF -> "사진 양식으로 출력 요청"
                     }
                 )
             }
@@ -581,7 +590,7 @@ private fun ExportPanel(
 }
 
 @Composable
-private fun TripLogRow(trip: TripLog) {
+private fun TripLogRow(trip: TripLog, onDelete: () -> Unit) {
     Card(shape = RoundedCornerShape(8.dp)) {
         Column(
             modifier = Modifier.padding(14.dp),
@@ -592,7 +601,13 @@ private fun TripLogRow(trip: TripLog) {
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Text(trip.usageDate.toString(), style = MaterialTheme.typography.titleSmall)
-                Text("${trip.drivingDistanceKm}km", color = MaterialTheme.colorScheme.primary)
+                Row {
+                    Text("${trip.drivingDistanceKm}km", color = MaterialTheme.colorScheme.primary)
+                    Spacer(Modifier.width(8.dp))
+                    androidx.compose.material3.IconButton(onClick = onDelete) {
+                        Icon(Icons.Default.Delete, contentDescription = "삭제")
+                    }
+                }
             }
             Text("${trip.departure} → ${trip.stopover} → ${trip.destination}")
             Text(
@@ -608,7 +623,10 @@ private fun TripLogRow(trip: TripLog) {
 }
 
 @Composable
-private fun AdminPanel(uiState: AppUiState) {
+private fun AdminPanel(
+    uiState: AppUiState,
+    onVehicleRegistrationChange: (String, String) -> Unit
+) {
     Card(shape = RoundedCornerShape(8.dp)) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -617,10 +635,27 @@ private fun AdminPanel(uiState: AppUiState) {
             Text("관리", style = MaterialTheme.typography.titleMedium)
             Text("초대코드: ${kr.co.hwacheon.carmileage.BuildConfig.DEFAULT_INVITE_CODE}")
             Text("관리자 PIN 데모값: 0000")
-            Text("차량별 기록 수")
+            Text("차량번호")
             uiState.data.vehicles.forEach { vehicle ->
                 val count = uiState.data.trips.count { it.vehicleId == vehicle.id }
-                Text("${vehicle.name}: ${count}건 · ${vehicle.registrationNumber}")
+                var plate by remember(vehicle.id, vehicle.registrationNumber) {
+                    mutableStateOf(vehicle.registrationNumber)
+                }
+                Text("${vehicle.name}: ${count}건")
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        modifier = Modifier.weight(1f),
+                        value = plate,
+                        onValueChange = { plate = it },
+                        label = { Text("차량번호") },
+                        singleLine = true
+                    )
+                    Button(
+                        onClick = { onVehicleRegistrationChange(vehicle.id, plate) }
+                    ) {
+                        Text("저장")
+                    }
+                }
             }
         }
     }
