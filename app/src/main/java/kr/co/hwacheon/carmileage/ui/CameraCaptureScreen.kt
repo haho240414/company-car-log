@@ -119,7 +119,8 @@ private fun CameraPreview(
     val previewView = remember { PreviewView(context) }
     val imageCapture = remember {
         ImageCapture.Builder()
-            .setCaptureMode(ImageCapture.CAPTURE_MODE_MINIMIZE_LATENCY)
+            .setCaptureMode(ImageCapture.CAPTURE_MODE_MAXIMIZE_QUALITY)
+            .setJpegQuality(95)
             .build()
     }
 
@@ -151,6 +152,15 @@ private fun CameraPreview(
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { previewView }
+        )
+        Text(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(16.dp),
+            text = "누적거리 숫자가 화면 중앙에 크게 보이게 찍어 주세요.",
+            color = MaterialTheme.colorScheme.onPrimary,
+            style = MaterialTheme.typography.bodyMedium
         )
         Row(
             modifier = Modifier

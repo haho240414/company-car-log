@@ -1,5 +1,19 @@
 # Release Notes
 
+## v0.1.2 - OCR and Google Sheets CSV
+
+### Added
+
+- Bundled on-device ML Kit OCR for odometer photos.
+- Odometer-specific candidate extraction that prefers mileage-like numbers and ignores common noise.
+- Google Sheets compatible CSV sharing from the monthly export screen.
+- Higher quality camera capture for OCR.
+
+### Notes
+
+- OCR still asks the user to confirm the detected value before saving.
+- CSV export opens through Android's share sheet; choose Google Sheets to use it like a spreadsheet.
+
 ## v0.1.1 - Installable phone test build
 
 ### Added

@@ -2,8 +2,10 @@ package kr.co.hwacheon.carmileage
 
 import android.app.Application
 import android.net.Uri
+import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import java.io.File
 import java.time.LocalDate
 import java.time.YearMonth
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -14,10 +16,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kr.co.hwacheon.carmileage.data.CompanyCarLogState
-import kr.co.hwacheon.carmileage.data.DemoMileageOcrService
 import kr.co.hwacheon.carmileage.data.ImageMetadataReader
 import kr.co.hwacheon.carmileage.data.LocalCompanyCarLogRepository
 import kr.co.hwacheon.carmileage.data.MileageOcrService
+import kr.co.hwacheon.carmileage.data.MlKitMileageOcrService
 import kr.co.hwacheon.carmileage.domain.Department
 import kr.co.hwacheon.carmileage.domain.ExportFormat
 import kr.co.hwacheon.carmileage.domain.ExportRequest
@@ -57,7 +59,10 @@ data class TripEditorState(
 data class ExportFormState(
     val month: String = YearMonth.now().toString(),
     val format: ExportFormat = ExportFormat.XLSX,
-    val resultMessage: String? = null
+    val resultMessage: String? = null,
+    val shareUri: String? = null,
+    val shareMimeType: String? = null,
+    val shareTitle: String? = null
 )
 
 data class ScreenState(
@@ -83,7 +88,7 @@ data class AppUiState(
 
 class CarLogViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = LocalCompanyCarLogRepository(application)
-    private val ocrService: MileageOcrService = DemoMileageOcrService()
+    private val ocrService: MileageOcrService = MlKitMileageOcrService(application)
     private val metadataReader = ImageMetadataReader(application)
     private val _screen = MutableStateFlow(ScreenState())
 
@@ -155,7 +160,7 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
                 editor = it.editor.copy(
                     usageDate = takenDate.toString(),
                     photoUri = uriText,
-                    photoStatus = "사진을 등록했습니다. 누적거리 OCR을 확인하는 중입니다.",
+                    photoStatus = "사진을 등록했습니다. 계기판 누적거리 OCR을 확인하는 중입니다.",
                     isOcrRunning = true,
                     ocrConfirmed = false
                 )
@@ -246,6 +251,10 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
 
         viewModelScope.launch {
             setBusy(true)
+            if (state.screen.export.format == ExportFormat.CSV) {
+                createAndShareCsv(vehicle = vehicle, month = month)
+                return@launch
+            }
             repository.requestExport(
                 ExportRequest(
                     vehicleId = vehicle.id,
@@ -267,6 +276,18 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
                     setBusy(false)
                     setMessage(error.message ?: "출력 요청에 실패했습니다.")
                 }
+            )
+        }
+    }
+
+    fun clearShareRequest() {
+        _screen.update {
+            it.copy(
+                export = it.export.copy(
+                    shareUri = null,
+                    shareMimeType = null,
+                    shareTitle = null
+                )
             )
         }
     }
@@ -296,5 +317,84 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
 
     private fun setMessage(value: String) {
         _screen.update { it.copy(message = value) }
+    }
+
+    private fun createAndShareCsv(vehicle: Vehicle, month: YearMonth) {
+        val trips = repository.state.value.trips
+            .filter { it.vehicleId == vehicle.id && YearMonth.from(it.usageDate) == month }
+            .sortedWith(compareBy { it.usageDate })
+        val fileName = "${month}_${vehicle.name}_운행기록부.csv".replace(" ", "_")
+        val directory = File(getApplication<Application>().cacheDir, "exports").also { it.mkdirs() }
+        val file = File(directory, fileName)
+        file.writeText(buildCsv(vehicle, month, trips), Charsets.UTF_8)
+        val uri = FileProvider.getUriForFile(
+            getApplication(),
+            "${getApplication<Application>().packageName}.fileprovider",
+            file
+        )
+
+        _screen.update {
+            it.copy(
+                busy = false,
+                export = it.export.copy(
+                    resultMessage = "CSV 파일을 만들었습니다. 공유 화면에서 Google Sheets를 선택하면 스프레드시트처럼 볼 수 있습니다.",
+                    shareUri = uri.toString(),
+                    shareMimeType = "text/csv",
+                    shareTitle = fileName
+                )
+            )
+        }
+    }
+
+    private fun buildCsv(
+        vehicle: Vehicle,
+        month: YearMonth,
+        trips: List<kr.co.hwacheon.carmileage.domain.TripLog>
+    ): String {
+        val rows = mutableListOf<List<String>>()
+        rows += listOf("${month.year}년 ${month.monthValue}월 업무용승용차 운행기록부")
+        rows += listOf("차량", vehicle.name, "차량번호", vehicle.registrationNumber)
+        rows += listOf(
+            "사용일자",
+            "부서",
+            "직책",
+            "성명",
+            "사용목적",
+            "출발지",
+            "출발시 누적거리(km)",
+            "경유지",
+            "도착지",
+            "도착시 누적거리(km)",
+            "주행거리(km)",
+            "업무용 주행거리 누계(km)"
+        )
+        trips.forEach { trip ->
+            rows += listOf(
+                trip.usageDate.toString(),
+                trip.departmentName,
+                trip.positionName,
+                trip.writerName,
+                trip.purpose,
+                trip.departure,
+                trip.startOdometerKm.toString(),
+                trip.stopover,
+                trip.destination,
+                trip.endOdometerKm.toString(),
+                trip.drivingDistanceKm.toString(),
+                trip.monthlyBusinessDistanceKm.toString()
+            )
+        }
+        return "\uFEFF" + rows.joinToString("\n") { row ->
+            row.joinToString(",") { cell -> cell.toCsvCell() }
+        }
+    }
+
+    private fun String.toCsvCell(): String {
+        val escaped = replace("\"", "\"\"")
+        return if (escaped.any { it == ',' || it == '"' || it == '\n' }) {
+            "\"$escaped\""
+        } else {
+            escaped
+        }
     }
 }

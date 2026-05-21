@@ -2,6 +2,7 @@
 
 package kr.co.hwacheon.carmileage.ui
 
+import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -56,6 +57,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.style.TextOverflow
@@ -77,12 +79,26 @@ import kr.co.hwacheon.carmileage.domain.Vehicle
 fun CarLogApp(viewModel: CarLogViewModel) {
     val uiState by viewModel.uiState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
+    val context = LocalContext.current
     var cameraOpen by remember { mutableStateOf(false) }
 
     LaunchedEffect(uiState.screen.message) {
         val message = uiState.screen.message ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(message)
         viewModel.clearMessage()
+    }
+
+    LaunchedEffect(uiState.screen.export.shareUri) {
+        val shareUri = uiState.screen.export.shareUri ?: return@LaunchedEffect
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = uiState.screen.export.shareMimeType ?: "text/csv"
+            putExtra(Intent.EXTRA_STREAM, Uri.parse(shareUri))
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(
+            Intent.createChooser(shareIntent, uiState.screen.export.shareTitle ?: "운행기록부 공유")
+        )
+        viewModel.clearShareRequest()
     }
 
     if (cameraOpen) {
@@ -144,7 +160,7 @@ private fun LoginScreen(
         ) {
             item {
                 Text(
-                    text = "초대코드와 사용자 정보를 입력하면 카니발, 스타렉스, 넥쏘 차계부를 함께 관리할 수 있습니다.",
+                    text = "초대코드와 사용자 정보를 입력하면 내 휴대폰에 카니발, 스타렉스, 넥쏘 차계부를 저장할 수 있습니다.",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -523,7 +539,13 @@ private fun ExportPanel(
             ) {
                 Icon(Icons.Default.FileDownload, contentDescription = null)
                 Spacer(Modifier.width(6.dp))
-                Text("사진 양식으로 출력 요청")
+                Text(
+                    if (export.format == ExportFormat.CSV) {
+                        "Google Sheets로 공유"
+                    } else {
+                        "사진 양식으로 출력 요청"
+                    }
+                )
             }
             export.resultMessage?.let { StatusSurface(it) }
         }
