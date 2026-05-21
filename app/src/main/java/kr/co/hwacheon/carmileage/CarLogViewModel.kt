@@ -14,9 +14,9 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kr.co.hwacheon.carmileage.data.CompanyCarLogState
-import kr.co.hwacheon.carmileage.data.DemoCompanyCloudRepository
 import kr.co.hwacheon.carmileage.data.DemoMileageOcrService
 import kr.co.hwacheon.carmileage.data.ImageMetadataReader
+import kr.co.hwacheon.carmileage.data.LocalCompanyCarLogRepository
 import kr.co.hwacheon.carmileage.data.MileageOcrService
 import kr.co.hwacheon.carmileage.domain.Department
 import kr.co.hwacheon.carmileage.domain.ExportFormat
@@ -82,7 +82,7 @@ data class AppUiState(
 }
 
 class CarLogViewModel(application: Application) : AndroidViewModel(application) {
-    private val repository = DemoCompanyCloudRepository()
+    private val repository = LocalCompanyCarLogRepository(application)
     private val ocrService: MileageOcrService = DemoMileageOcrService()
     private val metadataReader = ImageMetadataReader(application)
     private val _screen = MutableStateFlow(ScreenState())

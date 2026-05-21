@@ -1,6 +1,8 @@
 package kr.co.hwacheon.carmileage.data
 
+import android.content.Context
 import java.security.MessageDigest
+import java.time.LocalDate
 import java.time.YearMonth
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +18,8 @@ import kr.co.hwacheon.carmileage.domain.Position
 import kr.co.hwacheon.carmileage.domain.TripLog
 import kr.co.hwacheon.carmileage.domain.UserProfile
 import kr.co.hwacheon.carmileage.domain.Vehicle
+import org.json.JSONArray
+import org.json.JSONObject
 
 data class CompanyCarLogState(
     val currentUser: UserProfile? = null,
@@ -49,7 +53,12 @@ interface CompanyCarLogRepository {
     suspend fun requestExport(request: ExportRequest): Result<ExportResult>
 }
 
-class DemoCompanyCloudRepository : CompanyCarLogRepository {
+class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
+    private val prefs = context.applicationContext.getSharedPreferences(
+        "company_car_log",
+        Context.MODE_PRIVATE
+    )
+
     private val seedVehicles = listOf(
         Vehicle(
             id = "carnival",
@@ -71,7 +80,13 @@ class DemoCompanyCloudRepository : CompanyCarLogRepository {
         )
     )
 
-    private val _state = MutableStateFlow(CompanyCarLogState(vehicles = seedVehicles))
+    private val _state = MutableStateFlow(
+        CompanyCarLogState(
+            currentUser = loadUser(),
+            vehicles = seedVehicles,
+            trips = loadTrips()
+        )
+    )
     override val state: StateFlow<CompanyCarLogState> = _state
 
     override suspend fun signIn(
@@ -102,6 +117,7 @@ class DemoCompanyCloudRepository : CompanyCarLogRepository {
             isAdmin = pin == "0000"
         )
         _state.update { it.copy(currentUser = user) }
+        persistUser(user)
         return Result.success(user)
     }
 
@@ -135,13 +151,9 @@ class DemoCompanyCloudRepository : CompanyCarLogRepository {
             )
         }.onSuccess { trip ->
             _state.update { current ->
-                current.copy(
-                    trips = (current.trips + trip)
-                        .sortedWith(
-                            compareByDescending<TripLog> { it.usageDate }
-                                .thenByDescending { it.createdAtMillis }
-                        )
-                )
+                val updatedTrips = (current.trips + trip).sortedForDisplay()
+                persistTrips(updatedTrips)
+                current.copy(trips = updatedTrips)
             }
         }
     }
@@ -168,4 +180,109 @@ class DemoCompanyCloudRepository : CompanyCarLogRepository {
 
     private fun YearMonth.toKoreanFileNamePart(): String =
         "${year}년_${monthValue.toString().padStart(2, '0')}월"
+
+    private fun persistUser(user: UserProfile) {
+        prefs.edit()
+            .putString(KEY_USER, user.toJson().toString())
+            .apply()
+    }
+
+    private fun persistTrips(trips: List<TripLog>) {
+        val payload = JSONArray().apply {
+            trips.forEach { put(it.toJson()) }
+        }
+        prefs.edit()
+            .putString(KEY_TRIPS, payload.toString())
+            .apply()
+    }
+
+    private fun loadUser(): UserProfile? {
+        val raw = prefs.getString(KEY_USER, null) ?: return null
+        return runCatching { JSONObject(raw).toUserProfile() }.getOrNull()
+    }
+
+    private fun loadTrips(): List<TripLog> {
+        val raw = prefs.getString(KEY_TRIPS, null) ?: return emptyList()
+        return runCatching {
+            val array = JSONArray(raw)
+            buildList {
+                for (index in 0 until array.length()) {
+                    add(array.getJSONObject(index).toTripLog())
+                }
+            }.sortedForDisplay()
+        }.getOrDefault(emptyList())
+    }
+
+    private fun List<TripLog>.sortedForDisplay(): List<TripLog> =
+        sortedWith(
+            compareByDescending<TripLog> { it.usageDate }
+                .thenByDescending { it.createdAtMillis }
+        )
+
+    private fun UserProfile.toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("name", name)
+        put("department", department)
+        put("position", position)
+        put("pinHash", pinHash)
+        put("isAdmin", isAdmin)
+    }
+
+    private fun JSONObject.toUserProfile(): UserProfile = UserProfile(
+        id = getString("id"),
+        name = getString("name"),
+        department = getString("department"),
+        position = getString("position"),
+        pinHash = getString("pinHash"),
+        isAdmin = optBoolean("isAdmin", false)
+    )
+
+    private fun TripLog.toJson(): JSONObject = JSONObject().apply {
+        put("id", id)
+        put("vehicleId", vehicleId)
+        put("vehicleName", vehicleName)
+        put("vehicleRegistrationNumber", vehicleRegistrationNumber)
+        put("usageDate", usageDate.toString())
+        put("createdAtMillis", createdAtMillis)
+        put("writerName", writerName)
+        put("departmentName", departmentName)
+        put("positionName", positionName)
+        put("purpose", purpose)
+        put("departure", departure)
+        put("stopover", stopover)
+        put("destination", destination)
+        put("startOdometerKm", startOdometerKm)
+        put("endOdometerKm", endOdometerKm)
+        put("drivingDistanceKm", drivingDistanceKm)
+        put("monthlyBusinessDistanceKm", monthlyBusinessDistanceKm)
+        put("ocrConfirmed", ocrConfirmed)
+        put("photoUri", photoUri)
+    }
+
+    private fun JSONObject.toTripLog(): TripLog = TripLog(
+        id = getString("id"),
+        vehicleId = getString("vehicleId"),
+        vehicleName = getString("vehicleName"),
+        vehicleRegistrationNumber = getString("vehicleRegistrationNumber"),
+        usageDate = LocalDate.parse(getString("usageDate")),
+        createdAtMillis = optLong("createdAtMillis", System.currentTimeMillis()),
+        writerName = getString("writerName"),
+        departmentName = getString("departmentName"),
+        positionName = getString("positionName"),
+        purpose = optString("purpose", "업무용"),
+        departure = optString("departure", "본점"),
+        stopover = getString("stopover"),
+        destination = optString("destination", "본점"),
+        startOdometerKm = getInt("startOdometerKm"),
+        endOdometerKm = getInt("endOdometerKm"),
+        drivingDistanceKm = getInt("drivingDistanceKm"),
+        monthlyBusinessDistanceKm = getInt("monthlyBusinessDistanceKm"),
+        ocrConfirmed = optBoolean("ocrConfirmed", false),
+        photoUri = optString("photoUri").takeIf { it.isNotBlank() && it != "null" }
+    )
+
+    private companion object {
+        const val KEY_USER = "user"
+        const val KEY_TRIPS = "trips"
+    }
 }

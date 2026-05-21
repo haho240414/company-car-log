@@ -18,14 +18,15 @@
 
 ## 현재 데모 동작
 
-실제 공용 클라우드, AI OCR, Excel/PDF 생성은 서버 자격증명과 배포 환경이 필요하므로 앱 안에는 데모 구현이 연결되어 있습니다.
+실제 공용 클라우드, AI OCR, Excel/PDF 생성은 서버 자격증명과 배포 환경이 필요하므로 아직 연결 전입니다. 다만 휴대폰 한 대에서 테스트할 수 있도록 사용자 정보와 운행기록은 앱 내부 로컬 저장소에 남습니다.
 
 - 초대코드: `HWACHEON-2026`
 - 관리자 데모 PIN: `0000`
 - 사진 OCR: 서버 연결 전까지 파일명에 4~7자리 숫자가 있을 때만 데모 인식하며, 일반 사진은 사용자가 도착 누적거리를 확인 입력합니다.
 - 출력: 실제 파일 다운로드 대신 서버 연결 후 생성될 파일명을 미리 보여줍니다.
+- 저장: 현재 버전은 설치한 휴대폰 안에만 저장되며, 앱 삭제 시 기록도 삭제됩니다.
 
-실서버 구현 시 `DemoCompanyCloudRepository`와 `DemoMileageOcrService`를 API 구현체로 교체하면 UI와 계산 로직은 그대로 사용할 수 있습니다. API 형태는 [docs/API_CONTRACT.md](docs/API_CONTRACT.md)에 정리되어 있습니다.
+실서버 구현 시 `LocalCompanyCarLogRepository`와 `DemoMileageOcrService`를 API 구현체로 교체하면 UI와 계산 로직은 그대로 사용할 수 있습니다. API 형태는 [docs/API_CONTRACT.md](docs/API_CONTRACT.md)에 정리되어 있습니다.
 
 ## Android Studio에서 실행
 

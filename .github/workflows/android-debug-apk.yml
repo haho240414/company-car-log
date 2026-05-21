@@ -2,6 +2,11 @@ name: Build installable debug APK
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Release tag to attach the APK to
+        required: false
+        default: v0.1.1
   push:
     branches:
       - main
@@ -50,8 +55,9 @@ jobs:
           path: dist/company-car-log-debug.apk
           retention-days: 30
 
-      - name: Attach APK to v0.1.0 release
+      - name: Attach APK to requested release
         if: github.event_name == 'workflow_dispatch'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload v0.1.0 dist/company-car-log-debug.apk --clobber
+          RELEASE_TAG: ${{ inputs.release_tag }}
+        run: gh release upload "$RELEASE_TAG" dist/company-car-log-debug.apk --clobber

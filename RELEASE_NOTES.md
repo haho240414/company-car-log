@@ -1,5 +1,19 @@
 # Release Notes
 
+## v0.1.1 - Installable phone test build
+
+### Added
+
+- GitHub Actions workflow that builds an installable debug APK.
+- Release APK upload automation for quick phone installation.
+- On-device local persistence for user profile and trip logs, so one phone can test real entry flows without a cloud server.
+
+### Notes
+
+- Records are stored only on the installed phone in this version.
+- Deleting the app deletes the saved records.
+- Shared company-wide storage still requires the planned server/Firebase integration.
+
 ## v0.1.0 - Initial shared car log app
 
 ### Added
