@@ -1,7 +1,11 @@
 package kr.co.hwacheon.carmileage
 
 import android.app.Application
+import android.content.ContentValues
 import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import androidx.core.content.FileProvider
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
@@ -58,11 +62,12 @@ data class TripEditorState(
 
 data class ExportFormState(
     val month: String = YearMonth.now().toString(),
-    val format: ExportFormat = ExportFormat.XLSX,
+    val format: ExportFormat = ExportFormat.CSV,
     val resultMessage: String? = null,
     val shareUri: String? = null,
     val shareMimeType: String? = null,
-    val shareTitle: String? = null
+    val shareTitle: String? = null,
+    val previewRows: List<List<String>> = emptyList()
 )
 
 data class ScreenState(
@@ -153,14 +158,22 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     fun onPhotoSelected(uri: Uri) {
-        val takenDate = metadataReader.resolveTakenDate(uri) ?: LocalDate.now()
+        val metadata = metadataReader.resolvePhotoMetadata(uri)
+        val takenDate = metadata.takenDate ?: LocalDate.now()
         val uriText = uri.toString()
-        _screen.update {
-            it.copy(
-                editor = it.editor.copy(
+        _screen.update { current ->
+            current.copy(
+                editor = current.editor.copy(
                     usageDate = takenDate.toString(),
+                    stopover = metadata.stopoverSuggestion
+                        ?.takeIf { current.editor.stopover.isBlank() }
+                        ?: current.editor.stopover,
                     photoUri = uriText,
-                    photoStatus = "사진을 등록했습니다. 계기판 누적거리 OCR을 확인하는 중입니다.",
+                    photoStatus = if (metadata.stopoverSuggestion != null) {
+                        "사진 날짜와 위치를 읽었습니다. 계기판 누적거리 OCR을 확인하는 중입니다."
+                    } else {
+                        "사진 날짜를 읽었습니다. 위치정보가 없으면 경유지를 직접 입력해 주세요. 계기판 누적거리 OCR을 확인하는 중입니다."
+                    },
                     isOcrRunning = true,
                     ocrConfirmed = false
                 )
@@ -324,9 +337,11 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
             .filter { it.vehicleId == vehicle.id && YearMonth.from(it.usageDate) == month }
             .sortedWith(compareBy { it.usageDate })
         val fileName = "${month}_${vehicle.name}_운행기록부.csv".replace(" ", "_")
+        val csv = buildCsv(vehicle, month, trips)
+        val downloadUri = saveCsvToDownloads(fileName, csv)
         val directory = File(getApplication<Application>().cacheDir, "exports").also { it.mkdirs() }
         val file = File(directory, fileName)
-        file.writeText(buildCsv(vehicle, month, trips), Charsets.UTF_8)
+        file.writeText(csv, Charsets.UTF_8)
         val uri = FileProvider.getUriForFile(
             getApplication(),
             "${getApplication<Application>().packageName}.fileprovider",
@@ -337,10 +352,17 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
             it.copy(
                 busy = false,
                 export = it.export.copy(
-                    resultMessage = "CSV 파일을 만들었습니다. 공유 화면에서 Google Sheets를 선택하면 스프레드시트처럼 볼 수 있습니다.",
+                    resultMessage = buildString {
+                        append("CSV 파일을 만들었습니다.")
+                        if (downloadUri != null) {
+                            append("\nDownloads 폴더에도 저장했습니다.")
+                        }
+                        append("\n공유 화면에서 Gmail, 카카오톡, Google Sheets 등을 선택할 수 있습니다.")
+                    },
                     shareUri = uri.toString(),
                     shareMimeType = "text/csv",
-                    shareTitle = fileName
+                    shareTitle = fileName,
+                    previewRows = buildPreviewRows(vehicle, month, trips)
                 )
             )
         }
@@ -396,5 +418,49 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
         } else {
             escaped
         }
+    }
+
+    private fun saveCsvToDownloads(fileName: String, csv: String): Uri? {
+        val resolver = getApplication<Application>().contentResolver
+        return runCatching {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                val values = ContentValues().apply {
+                    put(MediaStore.MediaColumns.DISPLAY_NAME, fileName)
+                    put(MediaStore.MediaColumns.MIME_TYPE, "text/csv")
+                    put(MediaStore.MediaColumns.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
+                    put(MediaStore.MediaColumns.IS_PENDING, 1)
+                }
+                val uri = resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+                    ?: return@runCatching null
+                resolver.openOutputStream(uri)?.use { output ->
+                    output.write(csv.toByteArray(Charsets.UTF_8))
+                }
+                values.clear()
+                values.put(MediaStore.MediaColumns.IS_PENDING, 0)
+                resolver.update(uri, values, null, null)
+                uri
+            } else {
+                null
+            }
+        }.getOrNull()
+    }
+
+    private fun buildPreviewRows(
+        vehicle: Vehicle,
+        month: YearMonth,
+        trips: List<kr.co.hwacheon.carmileage.domain.TripLog>
+    ): List<List<String>> {
+        val header = listOf("일자", "경유지", "출발km", "도착km", "주행km", "월누계")
+        val rows = trips.map { trip ->
+            listOf(
+                trip.usageDate.toString(),
+                trip.stopover,
+                trip.startOdometerKm.toString(),
+                trip.endOdometerKm.toString(),
+                trip.drivingDistanceKm.toString(),
+                trip.monthlyBusinessDistanceKm.toString()
+            )
+        }
+        return listOf(listOf("${month} ${vehicle.name} 운행기록")) + listOf(header) + rows
     }
 }

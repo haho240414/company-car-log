@@ -1,5 +1,19 @@
 # Release Notes
 
+## v0.1.3 - Photo location and reliable CSV export
+
+### Added
+
+- Photo metadata reader now uses EXIF GPS or the device's last known location to suggest the stopover field.
+- Camera permission flow asks for optional location permission so in-app photos can still use current location when EXIF GPS is unavailable.
+- Export screen shows the selected month's saved records before exporting.
+- CSV export saves to the phone's Downloads folder and opens Android sharing for Gmail, KakaoTalk, Google Sheets, and similar apps.
+
+### Notes
+
+- GPS is only available when the photo contains location metadata or location permission is granted.
+- Google Sheets-style export is CSV-first in this version; real XLSX/PDF generation still needs the planned server implementation.
+
 ## v0.1.2 - OCR and Google Sheets CSV
 
 ### Added

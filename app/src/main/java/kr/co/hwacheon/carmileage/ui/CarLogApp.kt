@@ -4,6 +4,7 @@ package kr.co.hwacheon.carmileage.ui
 
 import android.content.Intent
 import android.net.Uri
+import java.time.YearMonth
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -509,6 +510,10 @@ private fun ExportPanel(
     onRequestExport: () -> Unit
 ) {
     val export = uiState.screen.export
+    val selectedMonth = runCatching { YearMonth.parse(export.month) }.getOrNull()
+    val monthlyTrips = uiState.selectedVehicleTrips
+        .filter { selectedMonth != null && YearMonth.from(it.usageDate) == selectedMonth }
+        .sortedBy { it.usageDate }
     Card(shape = RoundedCornerShape(8.dp)) {
         Column(
             modifier = Modifier.padding(16.dp),
@@ -541,13 +546,36 @@ private fun ExportPanel(
                 Spacer(Modifier.width(6.dp))
                 Text(
                     if (export.format == ExportFormat.CSV) {
-                        "Google Sheets로 공유"
+                        "다운로드하고 공유"
                     } else {
                         "사진 양식으로 출력 요청"
                     }
                 )
             }
+            Text("현재 월 기록 ${monthlyTrips.size}건", style = MaterialTheme.typography.titleSmall)
+            if (monthlyTrips.isEmpty()) {
+                EmptyText("선택한 월에 저장된 기록이 없습니다.")
+            } else {
+                monthlyTrips.forEach { trip ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("${trip.usageDate} ${trip.stopover}", modifier = Modifier.weight(1f))
+                        Text("${trip.drivingDistanceKm}km")
+                    }
+                }
+            }
             export.resultMessage?.let { StatusSurface(it) }
+            if (export.previewRows.isNotEmpty()) {
+                Text("내보내기 미리보기", style = MaterialTheme.typography.titleSmall)
+                export.previewRows.take(8).forEach { row ->
+                    Text(
+                        text = row.joinToString(" | "),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
         }
     }
 }

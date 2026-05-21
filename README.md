@@ -11,9 +11,10 @@
 - 차량별 운행 등록과 기록 조회
 - 도착 후 계기판 사진 1장 등록 흐름
 - ML Kit 기반 기기 내 계기판 숫자 OCR
+- 사진 EXIF 날짜/GPS 또는 기기 위치를 활용한 사용일자/경유지 자동 입력
 - 출발 누적거리 자동 입력: 같은 차량의 직전 도착 누적거리 사용
 - 주행거리 및 월 업무용 주행거리 누계 계산
-- 월별 Google Sheets용 CSV 공유 및 Excel/PDF 출력 요청 UI
+- 월별 기록 화면 미리보기, Downloads CSV 저장, Google Sheets/Gmail/카카오톡 공유
 - 서버 교체를 위한 Repository/OCR/Export 인터페이스 경계
 - 계산 로직 단위 테스트
 
@@ -26,6 +27,7 @@
 - 사진 OCR: ML Kit 번들 OCR로 사진 속 숫자를 인식하고, 계기판 누적거리 후보를 자동 입력합니다. 저장 전 실제 숫자와 한 번 비교해 주세요.
 - 출력: 실제 파일 다운로드 대신 서버 연결 후 생성될 파일명을 미리 보여줍니다.
 - Google Sheets: CSV 공유를 선택하면 안드로이드 공유 화면에서 Google Sheets로 열 수 있습니다.
+- 내보내기: CSV 파일을 Downloads 폴더에 저장하고, 동시에 공유 화면을 열어 메일/카카오톡 등으로 보낼 수 있습니다.
 - 저장: 현재 버전은 설치한 휴대폰 안에만 저장되며, 앱 삭제 시 기록도 삭제됩니다.
 
 실서버 구현 시 `LocalCompanyCarLogRepository`를 공용 클라우드 API 구현체로 교체하면 UI와 계산 로직은 그대로 사용할 수 있습니다. API 형태는 [docs/API_CONTRACT.md](docs/API_CONTRACT.md)에 정리되어 있습니다.

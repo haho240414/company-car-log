@@ -62,9 +62,9 @@ fun CameraCaptureScreen(
         )
     }
     val permissionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        hasCameraPermission = granted
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { grants ->
+        hasCameraPermission = grants[Manifest.permission.CAMERA] == true
     }
 
     Scaffold(
@@ -89,12 +89,20 @@ fun CameraCaptureScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "도착시 누적거리를 자동으로 읽으려면 카메라 권한이 필요합니다.",
+                    text = "도착시 누적거리를 읽으려면 카메라 권한이 필요합니다. 위치 권한을 함께 허용하면 경유지를 자동으로 채울 수 있습니다.",
                     style = MaterialTheme.typography.bodyLarge
                 )
                 Button(
                     modifier = Modifier.padding(top = 16.dp),
-                    onClick = { permissionLauncher.launch(Manifest.permission.CAMERA) }
+                    onClick = {
+                        permissionLauncher.launch(
+                            arrayOf(
+                                Manifest.permission.CAMERA,
+                                Manifest.permission.ACCESS_FINE_LOCATION,
+                                Manifest.permission.ACCESS_COARSE_LOCATION
+                            )
+                        )
+                    }
                 ) {
                     Icon(Icons.Default.CameraAlt, contentDescription = null)
                     Text("권한 허용")
