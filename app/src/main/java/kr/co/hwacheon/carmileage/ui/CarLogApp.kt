@@ -29,6 +29,7 @@ import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.DirectionsCar
 import androidx.compose.material.icons.filled.FileDownload
 import androidx.compose.material.icons.filled.History
+import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.PhotoLibrary
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.UploadFile
@@ -135,7 +136,8 @@ fun CarLogApp(viewModel: CarLogViewModel) {
             onExportChange = viewModel::updateExport,
             onRequestExport = viewModel::requestExport,
             onDeleteTrip = viewModel::deleteTrip,
-            onVehicleRegistrationChange = viewModel::updateVehicleRegistration
+            onVehicleRegistrationChange = viewModel::updateVehicleRegistration,
+            onSignOut = viewModel::signOut
         )
     }
 }
@@ -164,7 +166,7 @@ private fun LoginScreen(
         ) {
             item {
                 Text(
-                    text = "초대코드와 사용자 정보를 입력하면 내 휴대폰에 카니발, 스타렉스, 넥쏘 차계부를 저장할 수 있습니다.",
+                    text = "초대코드와 사용자 정보를 입력하면 이 휴대폰에 자동 로그인 정보와 카니발, 스타렉스, 넥쏘 차계부를 저장합니다.",
                     style = MaterialTheme.typography.bodyLarge
                 )
             }
@@ -268,7 +270,8 @@ private fun MainScreen(
     onExportChange: ((kr.co.hwacheon.carmileage.ExportFormState) -> kr.co.hwacheon.carmileage.ExportFormState) -> Unit,
     onRequestExport: () -> Unit,
     onDeleteTrip: (String) -> Unit,
-    onVehicleRegistrationChange: (String, String) -> Unit
+    onVehicleRegistrationChange: (String, String) -> Unit,
+    onSignOut: () -> Unit
 ) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -358,7 +361,8 @@ private fun MainScreen(
                 AppTab.ADMIN -> item {
                     AdminPanel(
                         uiState = uiState,
-                        onVehicleRegistrationChange = onVehicleRegistrationChange
+                        onVehicleRegistrationChange = onVehicleRegistrationChange,
+                        onSignOut = onSignOut
                     )
                 }
             }
@@ -625,7 +629,8 @@ private fun TripLogRow(trip: TripLog, onDelete: () -> Unit) {
 @Composable
 private fun AdminPanel(
     uiState: AppUiState,
-    onVehicleRegistrationChange: (String, String) -> Unit
+    onVehicleRegistrationChange: (String, String) -> Unit,
+    onSignOut: () -> Unit
 ) {
     Card(shape = RoundedCornerShape(8.dp)) {
         Column(
@@ -633,6 +638,18 @@ private fun AdminPanel(
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Text("관리", style = MaterialTheme.typography.titleMedium)
+            uiState.data.currentUser?.let { user ->
+                Text("현재 사용자: ${user.department} / ${user.position} / ${user.name}")
+                Text("자동 로그인: 이 기기에 저장됨")
+                OutlinedButton(
+                    modifier = Modifier.fillMaxWidth(),
+                    onClick = onSignOut
+                ) {
+                    Icon(Icons.Default.Logout, contentDescription = null)
+                    Spacer(Modifier.width(6.dp))
+                    Text("로그아웃")
+                }
+            }
             Text("초대코드: ${kr.co.hwacheon.carmileage.BuildConfig.DEFAULT_INVITE_CODE}")
             Text("관리자 PIN 데모값: 0000")
             Text("차량번호")

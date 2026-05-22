@@ -40,6 +40,8 @@ interface CompanyCarLogRepository {
         customPosition: String
     ): Result<UserProfile>
 
+    suspend fun signOut(): Result<Unit>
+
     suspend fun saveTrip(
         vehicle: Vehicle,
         usageDate: java.time.LocalDate,
@@ -126,6 +128,15 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
         _state.update { it.copy(currentUser = user) }
         persistUser(user)
         return Result.success(user)
+    }
+
+    override suspend fun signOut(): Result<Unit> {
+        delay(150)
+        prefs.edit()
+            .remove(KEY_USER)
+            .apply()
+        _state.update { it.copy(currentUser = null) }
+        return Result.success(Unit)
     }
 
     override suspend fun saveTrip(

@@ -38,8 +38,13 @@ class WordDocxBuilderTest {
         assertTrue(entries.containsKey("[Content_Types].xml"))
         assertTrue(entries.containsKey("_rels/.rels"))
         assertTrue(entries.containsKey("word/document.xml"))
-        assertTrue(entries.getValue("word/document.xml").contains("업무용승용차 운행기록부"))
-        assertTrue(entries.getValue("word/document.xml").contains("30마 3144"))
+        val documentXml = entries.getValue("word/document.xml")
+        assertTrue(documentXml.contains("업무용승용차 운행기록부"))
+        assertTrue(documentXml.contains("사 무 소 명"))
+        assertTrue(documentXml.contains("①사용일자"))
+        assertTrue(documentXml.contains("⑤출발시"))
+        assertTrue(documentXml.contains("⑫총주행"))
+        assertTrue(documentXml.contains("30마 3144"))
     }
 
     private fun unzipEntries(bytes: ByteArray): Map<String, String> {

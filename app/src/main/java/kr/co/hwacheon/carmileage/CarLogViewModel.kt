@@ -146,6 +146,23 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun signOut() {
+        viewModelScope.launch {
+            setBusy(true)
+            repository.signOut().fold(
+                onSuccess = {
+                    _screen.update {
+                        ScreenState(message = "로그아웃했습니다. 다시 로그인하면 이 기기에서 자동 로그인됩니다.")
+                    }
+                },
+                onFailure = { error ->
+                    setBusy(false)
+                    setMessage(error.message ?: "로그아웃하지 못했습니다.")
+                }
+            )
+        }
+    }
+
     fun selectVehicle(vehicleId: String) {
         _screen.update { it.copy(selectedVehicleId = vehicleId) }
         refreshStartOdometer(vehicleId)

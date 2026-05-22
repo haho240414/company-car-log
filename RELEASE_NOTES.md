@@ -1,5 +1,18 @@
 # Release Notes
 
+## v0.1.5 - Paper-style Word form and login controls
+
+### Added
+
+- Word export now follows the photographed operation log form: company header, vehicle number line, grouped yellow table headers, daily rows, checker columns, and bottom total fields.
+- Login state is kept on the phone so reopening the app automatically returns to the saved user.
+- Management tab now shows the current user and includes a logout button.
+
+### Improved
+
+- Word totals now include total driving distance, business driving distance, and business-use ratio.
+- Login screen explains that the entered user profile is saved on the device for automatic login.
+
 ## v0.1.4 - Word export and vehicle management
 
 ### Added
