@@ -1,5 +1,17 @@
 # Release Notes
 
+## v0.1.6 - Custom vehicle management
+
+### Added
+
+- Vehicles can now be added from the management tab with vehicle name, registration number, and initial odometer.
+- Vehicles with no saved trip records can be deleted from the management tab.
+
+### Improved
+
+- Deleted vehicles stay deleted after app restart.
+- When the previously selected vehicle is deleted, the app automatically selects another available vehicle.
+
 ## v0.1.5 - Paper-style Word form and login controls
 
 ### Added

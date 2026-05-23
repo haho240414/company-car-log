@@ -71,6 +71,7 @@ import kr.co.hwacheon.carmileage.AppUiState
 import kr.co.hwacheon.carmileage.CarLogViewModel
 import kr.co.hwacheon.carmileage.LoginFormState
 import kr.co.hwacheon.carmileage.TripEditorState
+import kr.co.hwacheon.carmileage.VehicleFormState
 import kr.co.hwacheon.carmileage.domain.Department
 import kr.co.hwacheon.carmileage.domain.ExportFormat
 import kr.co.hwacheon.carmileage.domain.MileageCalculator
@@ -137,6 +138,9 @@ fun CarLogApp(viewModel: CarLogViewModel) {
             onRequestExport = viewModel::requestExport,
             onDeleteTrip = viewModel::deleteTrip,
             onVehicleRegistrationChange = viewModel::updateVehicleRegistration,
+            onVehicleFormChange = viewModel::updateVehicleForm,
+            onAddVehicle = viewModel::addVehicle,
+            onDeleteVehicle = viewModel::deleteVehicle,
             onSignOut = viewModel::signOut
         )
     }
@@ -271,6 +275,9 @@ private fun MainScreen(
     onRequestExport: () -> Unit,
     onDeleteTrip: (String) -> Unit,
     onVehicleRegistrationChange: (String, String) -> Unit,
+    onVehicleFormChange: ((VehicleFormState) -> VehicleFormState) -> Unit,
+    onAddVehicle: () -> Unit,
+    onDeleteVehicle: (String) -> Unit,
     onSignOut: () -> Unit
 ) {
     Scaffold(
@@ -362,6 +369,9 @@ private fun MainScreen(
                     AdminPanel(
                         uiState = uiState,
                         onVehicleRegistrationChange = onVehicleRegistrationChange,
+                        onVehicleFormChange = onVehicleFormChange,
+                        onAddVehicle = onAddVehicle,
+                        onDeleteVehicle = onDeleteVehicle,
                         onSignOut = onSignOut
                     )
                 }
@@ -630,6 +640,9 @@ private fun TripLogRow(trip: TripLog, onDelete: () -> Unit) {
 private fun AdminPanel(
     uiState: AppUiState,
     onVehicleRegistrationChange: (String, String) -> Unit,
+    onVehicleFormChange: ((VehicleFormState) -> VehicleFormState) -> Unit,
+    onAddVehicle: () -> Unit,
+    onDeleteVehicle: (String) -> Unit,
     onSignOut: () -> Unit
 ) {
     Card(shape = RoundedCornerShape(8.dp)) {
@@ -652,25 +665,70 @@ private fun AdminPanel(
             }
             Text("초대코드: ${kr.co.hwacheon.carmileage.BuildConfig.DEFAULT_INVITE_CODE}")
             Text("관리자 PIN 데모값: 0000")
-            Text("차량번호")
+            Text("차량 추가", style = MaterialTheme.typography.titleSmall)
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = uiState.screen.vehicleForm.name,
+                onValueChange = { value -> onVehicleFormChange { it.copy(name = value) } },
+                label = { Text("차량명") },
+                singleLine = true
+            )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = uiState.screen.vehicleForm.registrationNumber,
+                onValueChange = { value ->
+                    onVehicleFormChange { it.copy(registrationNumber = value) }
+                },
+                label = { Text("차량번호") },
+                singleLine = true
+            )
+            OutlinedTextField(
+                modifier = Modifier.fillMaxWidth(),
+                value = uiState.screen.vehicleForm.initialOdometer,
+                onValueChange = { value ->
+                    onVehicleFormChange { it.copy(initialOdometer = value.filter(Char::isDigit)) }
+                },
+                label = { Text("초기 누적거리") },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+            )
+            Button(
+                modifier = Modifier.fillMaxWidth(),
+                onClick = onAddVehicle
+            ) {
+                Icon(Icons.Default.DirectionsCar, contentDescription = null)
+                Spacer(Modifier.width(6.dp))
+                Text("차량 추가")
+            }
+            Text("차량 관리", style = MaterialTheme.typography.titleSmall)
             uiState.data.vehicles.forEach { vehicle ->
                 val count = uiState.data.trips.count { it.vehicleId == vehicle.id }
                 var plate by remember(vehicle.id, vehicle.registrationNumber) {
                     mutableStateOf(vehicle.registrationNumber)
                 }
                 Text("${vehicle.name}: ${count}건")
+                OutlinedTextField(
+                    modifier = Modifier.fillMaxWidth(),
+                    value = plate,
+                    onValueChange = { plate = it },
+                    label = { Text("차량번호") },
+                    singleLine = true
+                )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        modifier = Modifier.weight(1f),
-                        value = plate,
-                        onValueChange = { plate = it },
-                        label = { Text("차량번호") },
-                        singleLine = true
-                    )
                     Button(
+                        modifier = Modifier.weight(1f),
                         onClick = { onVehicleRegistrationChange(vehicle.id, plate) }
                     ) {
                         Text("저장")
+                    }
+                    OutlinedButton(
+                        modifier = Modifier.weight(1f),
+                        enabled = count == 0 && uiState.data.vehicles.size > 1,
+                        onClick = { onDeleteVehicle(vehicle.id) }
+                    ) {
+                        Icon(Icons.Default.Delete, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("삭제")
                     }
                 }
             }

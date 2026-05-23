@@ -72,12 +72,19 @@ data class ExportFormState(
     val previewRows: List<List<String>> = emptyList()
 )
 
+data class VehicleFormState(
+    val name: String = "",
+    val registrationNumber: String = "",
+    val initialOdometer: String = "0"
+)
+
 data class ScreenState(
     val selectedVehicleId: String = "carnival",
     val activeTab: AppTab = AppTab.REGISTER,
     val login: LoginFormState = LoginFormState(),
     val editor: TripEditorState = TripEditorState(),
     val export: ExportFormState = ExportFormState(),
+    val vehicleForm: VehicleFormState = VehicleFormState(),
     val busy: Boolean = false,
     val message: String? = null
 )
@@ -108,7 +115,10 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
     )
 
     init {
-        refreshStartOdometer(vehicleId = _screen.value.selectedVehicleId)
+        val initialVehicleId = repository.state.value.vehicles.firstOrNull()?.id
+            ?: _screen.value.selectedVehicleId
+        _screen.update { it.copy(selectedVehicleId = initialVehicleId) }
+        refreshStartOdometer(vehicleId = initialVehicleId)
     }
 
     fun updateLogin(transform: (LoginFormState) -> LoginFormState) {
@@ -344,6 +354,65 @@ class CarLogViewModel(application: Application) : AndroidViewModel(application) 
                 },
                 onFailure = { error ->
                     setMessage(error.message ?: "차량번호를 저장하지 못했습니다.")
+                }
+            )
+        }
+    }
+
+    fun updateVehicleForm(transform: (VehicleFormState) -> VehicleFormState) {
+        _screen.update { it.copy(vehicleForm = transform(it.vehicleForm)) }
+    }
+
+    fun addVehicle() {
+        val form = _screen.value.vehicleForm
+        val initialOdometer = form.initialOdometer.toIntOrNull() ?: run {
+            setMessage("초기 누적거리는 숫자로 입력해 주세요.")
+            return
+        }
+        viewModelScope.launch {
+            repository.addVehicle(
+                name = form.name,
+                registrationNumber = form.registrationNumber,
+                initialOdometerKm = initialOdometer
+            ).fold(
+                onSuccess = { vehicle ->
+                    _screen.update {
+                        it.copy(
+                            selectedVehicleId = vehicle.id,
+                            vehicleForm = VehicleFormState(),
+                            message = "${vehicle.name} 차량을 추가했습니다."
+                        )
+                    }
+                    refreshStartOdometer(vehicle.id)
+                },
+                onFailure = { error ->
+                    setMessage(error.message ?: "차량을 추가하지 못했습니다.")
+                }
+            )
+        }
+    }
+
+    fun deleteVehicle(vehicleId: String) {
+        val currentState = uiState.value
+        val nextVehicleId = currentState.data.vehicles.firstOrNull { it.id != vehicleId }?.id
+            ?: currentState.screen.selectedVehicleId
+        viewModelScope.launch {
+            repository.deleteVehicle(vehicleId).fold(
+                onSuccess = {
+                    _screen.update { current ->
+                        current.copy(
+                            selectedVehicleId = if (current.selectedVehicleId == vehicleId) {
+                                nextVehicleId
+                            } else {
+                                current.selectedVehicleId
+                            },
+                            message = "차량을 삭제했습니다."
+                        )
+                    }
+                    refreshStartOdometer(_screen.value.selectedVehicleId)
+                },
+                onFailure = { error ->
+                    setMessage(error.message ?: "차량을 삭제하지 못했습니다.")
                 }
             )
         }

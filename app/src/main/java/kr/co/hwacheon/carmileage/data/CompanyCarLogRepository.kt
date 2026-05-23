@@ -4,6 +4,7 @@ import android.content.Context
 import java.security.MessageDigest
 import java.time.LocalDate
 import java.time.YearMonth
+import java.util.UUID
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -58,6 +59,14 @@ interface CompanyCarLogRepository {
         vehicleId: String,
         registrationNumber: String
     ): Result<Vehicle>
+
+    suspend fun addVehicle(
+        name: String,
+        registrationNumber: String,
+        initialOdometerKm: Int
+    ): Result<Vehicle>
+
+    suspend fun deleteVehicle(vehicleId: String): Result<Unit>
 
     suspend fun requestExport(request: ExportRequest): Result<ExportResult>
 }
@@ -211,6 +220,60 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
         return Result.success(updatedVehicle)
     }
 
+    override suspend fun addVehicle(
+        name: String,
+        registrationNumber: String,
+        initialOdometerKm: Int
+    ): Result<Vehicle> {
+        delay(150)
+        val cleanedName = name.trim()
+        val cleanedRegistrationNumber = registrationNumber.trim()
+        if (cleanedName.isBlank()) {
+            return Result.failure(IllegalArgumentException("차량명을 입력해 주세요."))
+        }
+        if (cleanedRegistrationNumber.isBlank()) {
+            return Result.failure(IllegalArgumentException("차량번호를 입력해 주세요."))
+        }
+        if (initialOdometerKm < 0) {
+            return Result.failure(IllegalArgumentException("초기 누적거리는 0 이상이어야 합니다."))
+        }
+        val currentVehicles = state.value.vehicles
+        if (currentVehicles.any { it.name == cleanedName }) {
+            return Result.failure(IllegalArgumentException("이미 같은 이름의 차량이 있습니다."))
+        }
+
+        val vehicle = Vehicle(
+            id = "vehicle-${UUID.randomUUID()}",
+            name = cleanedName,
+            registrationNumber = cleanedRegistrationNumber,
+            initialOdometerKm = initialOdometerKm
+        )
+        val updatedVehicles = currentVehicles + vehicle
+        persistVehicles(updatedVehicles)
+        _state.update { it.copy(vehicles = updatedVehicles) }
+        return Result.success(vehicle)
+    }
+
+    override suspend fun deleteVehicle(vehicleId: String): Result<Unit> {
+        delay(150)
+        val currentVehicles = state.value.vehicles
+        val vehicle = currentVehicles.firstOrNull { it.id == vehicleId }
+            ?: return Result.failure(IllegalArgumentException("삭제할 차량을 찾을 수 없습니다."))
+        if (currentVehicles.size <= 1) {
+            return Result.failure(IllegalArgumentException("차량은 최소 1대가 필요합니다."))
+        }
+        if (state.value.trips.any { it.vehicleId == vehicleId }) {
+            return Result.failure(
+                IllegalArgumentException("${vehicle.name} 운행 기록이 있어 삭제할 수 없습니다. 기록을 먼저 삭제해 주세요.")
+            )
+        }
+
+        val updatedVehicles = currentVehicles.filterNot { it.id == vehicleId }
+        persistVehicles(updatedVehicles)
+        _state.update { it.copy(vehicles = updatedVehicles) }
+        return Result.success(Unit)
+    }
+
     override suspend fun requestExport(request: ExportRequest): Result<ExportResult> {
         delay(300)
         val vehicle = state.value.vehicles.firstOrNull { it.id == request.vehicleId }
@@ -262,12 +325,11 @@ class LocalCompanyCarLogRepository(context: Context) : CompanyCarLogRepository {
         val raw = prefs.getString(KEY_VEHICLES, null) ?: return seedVehicles
         return runCatching {
             val array = JSONArray(raw)
-            val persisted = buildList {
+            buildList {
                 for (index in 0 until array.length()) {
                     add(array.getJSONObject(index).toVehicle())
                 }
-            }.associateBy { it.id }
-            seedVehicles.map { persisted[it.id] ?: it }
+            }.ifEmpty { seedVehicles }
         }.getOrDefault(seedVehicles)
     }
 
